@@ -5,22 +5,28 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 )
 
 func handle(localConn net.Conn, remoteConn net.Conn) {
-	defer localConn.Close()
-	defer remoteConn.Close()
+	var once sync.Once
+	onceBody := func() {
+		localConn.Close()
+		remoteConn.Close()
+	}
 	done := make(chan struct{})
 
 	// handle upstream
 	go func() {
 		defer close(done)
 		nUpsteam, _ := io.Copy(localConn, remoteConn)
+		once.Do(onceBody)
 		log.Printf("upstream %d bytes: %v <--  %v\n", nUpsteam, localConn.RemoteAddr(), remoteConn.RemoteAddr())
 	}()
 
 	// handle downstream
 	nDownstream, _ := io.Copy(remoteConn, localConn)
+	once.Do(onceBody)
 	log.Printf("downstream %d bytes: %v -->  %v\n", nDownstream, localConn.RemoteAddr(), remoteConn.RemoteAddr())
 
 	<-done
